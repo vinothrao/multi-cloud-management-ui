@@ -1,0 +1,46 @@
+name: Azure Storage Static Website CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_STORAGE_URL: ${{ secrets.NEXT_PUBLIC_STORAGE_URL }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Upload to Azure Storage
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            # Enable static website hosting
+            az storage blob service-properties update --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }} --static-website --index-document index.html --404-document 404.html
+
+            # Upload files
+            az storage blob upload-batch -s out -d '$web' --account-name ${{ secrets.STORAGE_ACCOUNT_NAME }}
